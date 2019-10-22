@@ -37,6 +37,9 @@ def select_frame_indices_to_include(subject, poses_3d_univ):
     # To process every single frame, uncomment the following line:
     # return np.arange(0, len(poses_3d_univ))
 
+    # process all frames
+    return np.arange(0, len(poses_3d_univ))
+
     # Take every 64th frame for the protocol #2 test subjects
     # (see the "Compositional Human Pose Regression" paper)
     if subject == 'S9' or subject == 'S11':
