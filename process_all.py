@@ -2,7 +2,8 @@
 
 from os import path, makedirs, listdir
 from shutil import move
-from spacepy import pycdf
+# from spacepy import pycdf
+import cdflib
 import numpy as np
 import h5py
 from subprocess import call
@@ -11,6 +12,11 @@ from tqdm import tqdm
 
 from metadata import load_h36m_metadata
 
+# set general params
+global path_base
+global threshold
+min_kp_move = 40 # 40
+path_base = '/net/hcihome/storage/tmilbich/tmilbich/iwr/Datasets/human3.6M/'
 
 metadata = load_h36m_metadata()
 
@@ -39,13 +45,15 @@ def select_frame_indices_to_include(subject, poses_3d_univ):
 
     # Take every 64th frame for the protocol #2 test subjects
     # (see the "Compositional Human Pose Regression" paper)
-    if subject == 'S9' or subject == 'S11':
-        return np.arange(0, len(poses_3d_univ), 64)
+    # todo: uncomment for official evaluation ??????
+    # if subject == 'S9' or subject == 'S11':
+    #     return np.arange(0, len(poses_3d_univ), 64)
+    # todo
 
     # Take only frames where movement has occurred for the protocol #2 train subjects
     frame_indices = []
     prev_joints3d = None
-    threshold = 40 ** 2  # Skip frames until at least one joint has moved by 40mm
+    threshold = min_kp_move ** 2  # Skip frames until at least one joint has moved by 40mm
     for i, joints3d in enumerate(poses_3d_univ):
         if prev_joints3d is not None:
             max_move = ((joints3d - prev_joints3d) ** 2).sum(axis=-1).max()
@@ -70,33 +78,37 @@ def infer_camera_intrinsics(points2d, points3d):
 
 
 def process_view(out_dir, subject, action, subaction, camera):
-    subj_dir = path.join('extracted', subject)
+    subj_dir = path.join(path_base, 'extracted', subject)
 
     base_filename = metadata.get_base_filename(subject, action, subaction, camera)
 
     # Load joint position annotations
-    with pycdf.CDF(path.join(subj_dir, 'Poses_D2_Positions', base_filename + '.cdf')) as cdf:
-        poses_2d = np.array(cdf['Pose'])
-        poses_2d = poses_2d.reshape(poses_2d.shape[1], 32, 2)
-    with pycdf.CDF(path.join(subj_dir, 'Poses_D3_Positions_mono_universal', base_filename + '.cdf')) as cdf:
-        poses_3d_univ = np.array(cdf['Pose'])
-        poses_3d_univ = poses_3d_univ.reshape(poses_3d_univ.shape[1], 32, 3)
-    with pycdf.CDF(path.join(subj_dir, 'Poses_D3_Positions_mono', base_filename + '.cdf')) as cdf:
-        poses_3d = np.array(cdf['Pose'])
-        poses_3d = poses_3d.reshape(poses_3d.shape[1], 32, 3)
+    cdf = cdflib.CDF(path.join(subj_dir, 'Poses_D2_Positions', base_filename + '.cdf'))
+    poses_2d = np.array(cdf['Pose'])
+    poses_2d = poses_2d.reshape(poses_2d.shape[1], 32, 2)
+
+    # with pycdf.CDF(path.join(subj_dir, 'Poses_D2_Positions', base_filename + '.cdf')) as cdf:
+    #     poses_2d = np.array(cdf['Pose'])
+    #     poses_2d = poses_2d.reshape(poses_2d.shape[1], 32, 2)
+    # with pycdf.CDF(path.join(subj_dir, 'Poses_D3_Positions_mono_universal', base_filename + '.cdf')) as cdf:
+    #     poses_3d_univ = np.array(cdf['Pose'])
+    #     poses_3d_univ = poses_3d_univ.reshape(poses_3d_univ.shape[1], 32, 3)
+    # with pycdf.CDF(path.join(subj_dir, 'Poses_D3_Positions_mono', base_filename + '.cdf')) as cdf:
+    #     poses_3d = np.array(cdf['Pose'])
+    #     poses_3d = poses_3d.reshape(poses_3d.shape[1], 32, 3)
 
     # Infer camera intrinsics
-    camera_int = infer_camera_intrinsics(poses_2d, poses_3d)
-    camera_int_univ = infer_camera_intrinsics(poses_2d, poses_3d_univ)
+    # camera_int = infer_camera_intrinsics(poses_2d, poses_3d)
+    # camera_int_univ = infer_camera_intrinsics(poses_2d, poses_3d_univ)
 
-    frame_indices = select_frame_indices_to_include(subject, poses_3d_univ)
+    frame_indices = select_frame_indices_to_include(subject, poses_2d) # poses_3d_univ
     frames = frame_indices + 1
     video_file = path.join(subj_dir, 'Videos', base_filename + '.mp4')
     frames_dir = path.join(out_dir, 'imageSequence', camera)
-    makedirs(frames_dir, exist_ok=True)
+    makedirs(path.join(path_base, frames_dir), exist_ok=True)
 
     # Check to see whether the frame images have already been extracted previously
-    existing_files = {f for f in listdir(frames_dir)}
+    existing_files = {f for f in listdir(path.join(path_base, frames_dir))}
     frames_are_extracted = True
     for i in frames:
         filename = 'img_%06d.jpg' % i
@@ -116,21 +128,26 @@ def process_view(out_dir, subject, action, subaction, camera):
             ])
 
             # Move included frame images into the output directory
+            frames_path = []
             for i in frames:
                 filename = 'img_%06d.jpg' % i
+                path_from = path.join(tmp_dir, filename)
+                path_to = path.join(path_base, frames_dir, filename)
                 move(
-                    path.join(tmp_dir, filename),
-                    path.join(frames_dir, filename)
+                    path_from,
+                    path_to
                 )
+                frames_path.append(np.string_(path.join(frames_dir, filename))) # only save sub-path as meta data
 
     return {
-        'pose/2d': poses_2d[frame_indices],
-        'pose/3d-univ': poses_3d_univ[frame_indices],
-        'pose/3d': poses_3d[frame_indices],
-        'intrinsics/' + camera: camera_int,
-        'intrinsics-univ/' + camera: camera_int_univ,
+        'pose_2d': poses_2d[frame_indices],
+        # 'pose/3d-univ': poses_3d_univ[frame_indices],
+        # 'pose/3d': poses_3d[frame_indices],
+        # 'intrinsics/' + camera: camera_int,
+        # 'intrinsics-univ/' + camera: camera_int_univ,
+        'frame_path': frames_path,
         'frame': frames,
-        'camera': np.full(frames.shape, int(camera)),
+        # 'camera': np.full(frames.shape, int(camera)),
         'subject': np.full(frames.shape, int(included_subjects[subject])),
         'action': np.full(frames.shape, int(action)),
         'subaction': np.full(frames.shape, int(subaction)),
@@ -140,7 +157,7 @@ def process_view(out_dir, subject, action, subaction, camera):
 def process_subaction(subject, action, subaction):
     datasets = {}
 
-    out_dir = path.join('processed', subject, metadata.action_names[action] + '-' + subaction)
+    out_dir = path.join('processed/min_kp_move_{}_plusEval'.format(min_kp_move), subject, metadata.action_names[action] + '-' + subaction)
     makedirs(out_dir, exist_ok=True)
 
     for camera in tqdm(metadata.camera_ids, ascii=True, leave=False):
@@ -164,7 +181,7 @@ def process_subaction(subject, action, subaction):
 
     datasets = {k: np.concatenate(v) for k, v in datasets.items()}
 
-    with h5py.File(path.join(out_dir, 'annot.h5'), 'w') as f:
+    with h5py.File(path.join(path_base, out_dir, 'annot.h5'), 'w') as f:
         for name, data in datasets.items():
             f.create_dataset(name, data=data)
 
@@ -186,4 +203,4 @@ def process_all():
 
 
 if __name__ == '__main__':
-  process_all()
+    process_all()
