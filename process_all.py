@@ -16,7 +16,7 @@ from metadata import load_h36m_metadata
 global path_base
 global threshold
 min_kp_move = 40 # 40
-path_base = '/net/hcihome/storage/tmilbich/tmilbich/iwr/Datasets/human3.6M/'
+path_base = '/net/hcihome/storage/hperrot/scratch/data/human3.6M'
 
 metadata = load_h36m_metadata()
 
@@ -49,6 +49,9 @@ def select_frame_indices_to_include(subject, poses_3d_univ):
     # if subject == 'S9' or subject == 'S11':
     #     return np.arange(0, len(poses_3d_univ), 64)
     # todo
+
+    # process all frames
+    return np.arange(0, len(poses_3d_univ))
 
     # Take only frames where movement has occurred for the protocol #2 train subjects
     frame_indices = []
@@ -128,7 +131,6 @@ def process_view(out_dir, subject, action, subaction, camera):
             ])
 
             # Move included frame images into the output directory
-            frames_path = []
             for i in frames:
                 filename = 'img_%06d.jpg' % i
                 path_from = path.join(tmp_dir, filename)
@@ -137,27 +139,34 @@ def process_view(out_dir, subject, action, subaction, camera):
                     path_from,
                     path_to
                 )
-                frames_path.append(np.string_(path.join(frames_dir, filename))) # only save sub-path as meta data
+
+    frames_path = []
+    for i in frames:
+        filename = 'img_%06d.jpg' % i
+        frames_path.append(np.string_(path.join(frames_dir, filename))) # only save sub-path as meta data
 
     return {
-        'pose_2d': poses_2d[frame_indices],
+        'keypoints': poses_2d[frame_indices],
         # 'pose/3d-univ': poses_3d_univ[frame_indices],
         # 'pose/3d': poses_3d[frame_indices],
         # 'intrinsics/' + camera: camera_int,
         # 'intrinsics-univ/' + camera: camera_int_univ,
         'frame_path': frames_path,
         'frame': frames,
+        'fid': frame_indices,
         # 'camera': np.full(frames.shape, int(camera)),
         'subject': np.full(frames.shape, int(included_subjects[subject])),
         'action': np.full(frames.shape, int(action)),
         'subaction': np.full(frames.shape, int(subaction)),
+        'pid': frame_indices
     }
 
 
 def process_subaction(subject, action, subaction):
     datasets = {}
 
-    out_dir = path.join('processed/min_kp_move_{}_plusEval'.format(min_kp_move), subject, metadata.action_names[action] + '-' + subaction)
+    # out_dir = path.join('processed/min_kp_move_{}_plusEval'.format(min_kp_move), subject, metadata.action_names[action] + '-' + subaction)
+    out_dir = path.join('processed/all', subject, metadata.action_names[action] + '-' + subaction)
     makedirs(out_dir, exist_ok=True)
 
     for camera in tqdm(metadata.camera_ids, ascii=True, leave=False):
