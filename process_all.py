@@ -21,7 +21,7 @@ path_base = '/net/hcihome/storage/hperrot/scratch/data/human3.6M'
 metadata = load_h36m_metadata()
 
 # Subjects to include when preprocessing
-included_subjects = {
+all_subjects = {
     'S1': 1,
     'S5': 5,
     'S6': 6,
@@ -155,18 +155,18 @@ def process_view(out_dir, subject, action, subaction, camera):
         'frame': frames,
         'fid': frame_indices,
         # 'camera': np.full(frames.shape, int(camera)),
-        'subject': np.full(frames.shape, int(included_subjects[subject])),
+        'subject': np.full(frames.shape, int(all_subjects[subject])),
         'action': np.full(frames.shape, int(action)),
         'subaction': np.full(frames.shape, int(subaction)),
         'pid': frame_indices
     }
 
 
-def process_subaction(subject, action, subaction):
+def process_subaction(subject, action, subaction, subfolder):
     datasets = {}
 
     # out_dir = path.join('processed/min_kp_move_{}_plusEval'.format(min_kp_move), subject, metadata.action_names[action] + '-' + subaction)
-    out_dir = path.join('processed/all', subject, metadata.action_names[action] + '-' + subaction)
+    out_dir = path.join('processed', subfolder, subject, metadata.action_names[action] + '-' + subaction)
     makedirs(out_dir, exist_ok=True)
 
     for camera in tqdm(metadata.camera_ids, ascii=True, leave=False):
@@ -195,8 +195,15 @@ def process_subaction(subject, action, subaction):
             f.create_dataset(name, data=data)
 
 
-def process_all():
+def process_all(mode='train'):
     sequence_mappings = metadata.sequence_mappings
+
+    assert mode in ['train', 'eval', 'all']
+
+    if mode == 'train':
+        included_subjects = { k: v for k, v in list(all_subjects.items())[:-2]}
+    elif mode == 'eval':
+        included_subjects = { k: v for k, v in list(all_subjects.items())[-2:]}
 
     subactions = []
 
@@ -208,8 +215,9 @@ def process_all():
         ]
 
     for subject, action, subaction in tqdm(subactions, ascii=True, leave=False):
-        process_subaction(subject, action, subaction)
+        process_subaction(subject, action, subaction, mode)
 
 
 if __name__ == '__main__':
-    process_all()
+    process_all('train')
+    process_all('eval')
