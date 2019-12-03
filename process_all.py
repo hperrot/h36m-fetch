@@ -16,7 +16,7 @@ from metadata import load_h36m_metadata
 global path_base
 global threshold
 min_kp_move = 40 # 40
-path_base = '/net/hcihome/storage/hperrot/scratch/data/human3.6M'
+path_base = '/net/hci-storage01/groupfolders/compvis/hperrot/datasets/human3.6M'
 
 metadata = load_h36m_metadata()
 
@@ -162,8 +162,7 @@ def process_view(out_dir, subject, action, subaction, camera):
     }
 
 
-def process_subaction(subject, action, subaction, subfolder):
-    datasets = {}
+def process_subaction(subject, action, subaction, subfolder, datasets):
 
     # out_dir = path.join('processed/min_kp_move_{}_plusEval'.format(min_kp_move), subject, metadata.action_names[action] + '-' + subaction)
     out_dir = path.join('processed', subfolder, subject, metadata.action_names[action] + '-' + subaction)
@@ -188,11 +187,6 @@ def process_subaction(subject, action, subaction, subfolder):
     if len(datasets) == 0:
         return
 
-    datasets = {k: np.concatenate(v) for k, v in datasets.items()}
-
-    with h5py.File(path.join(path_base, out_dir, 'annot.h5'), 'w') as f:
-        for name, data in datasets.items():
-            f.create_dataset(name, data=data)
 
 
 def process_all(mode='train'):
@@ -204,6 +198,8 @@ def process_all(mode='train'):
         included_subjects = { k: v for k, v in list(all_subjects.items())[:-2]}
     elif mode == 'eval':
         included_subjects = { k: v for k, v in list(all_subjects.items())[-2:]}
+    elif mode == 'all':
+        included_subjects = all_subjects
 
     subactions = []
 
@@ -214,10 +210,17 @@ def process_all(mode='train'):
             if int(action) > 1  # Exclude '_ALL'
         ]
 
+    datasets = {}
     for subject, action, subaction in tqdm(subactions, ascii=True, leave=False):
-        process_subaction(subject, action, subaction, mode)
+        process_subaction(subject, action, subaction, mode, datasets)
 
+    datasets = {k: np.concatenate(v) for k, v in datasets.items()}
+
+    with h5py.File(path.join(path_base, 'processed', mode, 'annot.h5'), 'w') as f:
+        for name, data in datasets.items():
+            f.create_dataset(name, data=data)
 
 if __name__ == '__main__':
-    process_all('train')
-    process_all('eval')
+    #process_all('train')
+    #process_all('eval')
+    process_all('all')
