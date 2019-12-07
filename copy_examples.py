@@ -48,6 +48,7 @@ if __name__ == '__main__':
         os.makedirs(os.path.dirname(filename_dst), exist_ok=True)
         shutil.copyfile(filename_src, filename_dst)
 
+        copied = 0
         for flow_calc_mode, flow_step, resolution, reverse in flow_calcs:
             filename_src = os.path.join(
                 dataset_root,
@@ -64,5 +65,8 @@ if __name__ == '__main__':
             # print('copy:', action, filename_src, filename_dst)
             try:
                 shutil.copyfile(filename_src, filename_dst)
+                copied += 1
             except Exception as e:
                 print('Error: ', e)
+
+        print(str(copied), 'flow viedeos copied for', action + '-' + subaction + '_' + camera)
